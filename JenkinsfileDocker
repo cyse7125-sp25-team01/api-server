@@ -6,9 +6,8 @@ pipeline {
 
     environment {
         IMAGE_NAME = "saimanasg/api-server"
-        NEXT_VERSION = nextVersion()
         DOCKER_CREDENTIALS_ID = "CloudJenkinsDockerHubPAT"
-        TAG = "${NEXT_VERSION}"
+        TAG = "${env.VERSION}"
     }
 
     stages {
@@ -17,6 +16,18 @@ pipeline {
                 script {
                     sh 'docker run --rm --privileged multiarch/qemu-user-static --reset -p yes'
                     sh 'docker buildx create --use --name multiarch_builder || true'
+                }
+            }
+        }
+
+        stage('Get Version') {
+            steps {
+                script {
+                    def currentVersion = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
+                    echo "Current version from Git tags: ${currentVersion}"
+                    
+                    env.VERSION = sh(script: "npx semver -i patch ${currentVersion}", returnStdout: true).trim()
+                    echo "Version set to: ${env.VERSION}"
                 }
             }
         }
@@ -35,8 +46,8 @@ pipeline {
             steps {
                 script {
                     sh """
-                        docker buildx build --platform linux/amd64,linux/arm64 \\
-                        -t ${IMAGE_NAME}:${TAG} . --push
+                        docker buildx build --platform linux/amd64,linux/arm64,linux/386,linux/ppc64le \\
+                        -t ${IMAGE_NAME}:${env.VERSION} . --push
                     """
                 }
             }
