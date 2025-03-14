@@ -1,18 +1,17 @@
 package handlers
 
 import (
+	"cloud.google.com/go/storage"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/csye7125/team01/internal/store"
+	"github.com/go-chi/chi/v5"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
-
-	"cloud.google.com/go/storage"
-	"github.com/csye7125/team01/internal/store"
-	"github.com/go-chi/chi/v5"
 )
 
 type TraceHandler struct {
@@ -163,10 +162,11 @@ func extractFileNameFromURL(url string) string {
 }
 
 func (h *TraceHandler) uploadFileToGCS(ctx context.Context, file io.Reader, fileName string) (string, error) {
-	// Log a message indicating that the credentials will be handled by GKE service account
-	fmt.Println("Using default service account for GCS access")
+	// Log the environment variable path
 
-	// Create GCS client using default credentials (service account assigned to the pod)
+	fmt.Println("Using service account")
+
+	// Create GCS client
 	client, err := storage.NewClient(ctx)
 	if err != nil {
 		fmt.Println("ERROR: Failed to create GCS client:", err)
@@ -202,19 +202,14 @@ func (h *TraceHandler) uploadFileToGCS(ctx context.Context, file io.Reader, file
 }
 
 func (h *TraceHandler) deleteFileFromGCS(ctx context.Context, fileName string) error {
-	// Log a message indicating that the credentials will be handled by GKE service account
-	fmt.Println("Using default service account for GCS access")
 
-	// Create GCS client using default credentials (service account assigned to the pod)
+	fmt.Println("Using service account")
 	client, err := storage.NewClient(ctx)
 	if err != nil {
-		fmt.Println("ERROR: Failed to create GCS client:", err)
+		fmt.Println("Error", err)
 		return fmt.Errorf("failed to create storage client: %w", err)
 	}
 	defer client.Close()
-
-	// Log bucket and file name
-	fmt.Printf("Deleting file '%s' from bucket '%s'\n", fileName, h.BucketName)
 
 	bucket := client.Bucket(h.BucketName)
 	object := bucket.Object(fileName)
@@ -222,11 +217,9 @@ func (h *TraceHandler) deleteFileFromGCS(ctx context.Context, fileName string) e
 	// Delete the file from GCS
 	err = object.Delete(ctx)
 	if err != nil {
-		fmt.Println("ERROR: Failed to delete file from GCS:", err)
 		return fmt.Errorf("failed to delete file from GCS: %w", err)
 	}
 
-	// Log success
-	fmt.Println("File successfully deleted from GCS:", fileName)
+	fmt.Println("File deleted successfully from GCS:", fileName)
 	return nil
 }

@@ -15,8 +15,8 @@ type Course struct {
 	Manufacturer    string    `json:"manufacturer"`
 	CreditHours     int       `json:"credit_hours"`
 	SemesterYear    int       `json:"semester_year"`
-	DateAdded       time.Time `json:"date_added"`
-	DateLastUpdated time.Time `json:"date_last_updated"`
+	DateAdded       time.Time `json:"date_added" gorm:"default:CURRENT_TIMESTAMP"`
+	DateLastUpdated time.Time `json:"date_last_updated" gorm:"autoUpdateTime"`
 	OwnerUserID     uint      `json:"owner_user_id"`
 	InstructorID    uint      `json:"instructor_id"`
 }
@@ -43,11 +43,13 @@ func (s *CourseStore) GetCourseByID(ctx context.Context, id uint) (*Course, erro
 
 // UpdateCourse updates an existing course
 func (s *CourseStore) UpdateCourse(ctx context.Context, id uint, updateData *Course) error {
+	updateData.DateLastUpdated = time.Now()
 	return s.db.WithContext(ctx).Model(&Course{}).Where("course_id = ?", id).Updates(updateData).Error
 }
 
 // PatchCourse performs a partial update on a course
 func (s *CourseStore) PatchCourse(ctx context.Context, id uint, updateData map[string]interface{}) error {
+	updateData["date_last_updated"] = time.Now()
 	return s.db.WithContext(ctx).Model(&Course{}).Where("course_id = ?", id).Updates(updateData).Error
 }
 
