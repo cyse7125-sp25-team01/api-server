@@ -20,14 +20,24 @@ pipeline {
             }
         }
 
-        stage('Get Version') {
+        stage('Determine Version') {
             steps {
                 script {
-                    def currentVersion = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
-                    echo "Current version from Git tags: ${currentVersion}"
+                    echo 'Running semantic-release to determine new version...'
+                    
+                    // Run semantic-release and capture the output
+                    def srOutput = sh(script: "semantic-release --no-ci", returnStdout: true).trim()
+                    echo "Semantic-release output: ${srOutput}"
 
-                    env.VERSION = sh(script: "npx semver -i patch ${currentVersion}", returnStdout: true).trim()
-                    echo "Version set to: ${env.VERSION}"
+                    // Extract the version from the output
+                    def version = sh(script: "echo '${srOutput}' | grep -oP 'The next release version is \\K[0-9]+\\.[0-9]+\\.[0-9]+'", returnStdout: true).trim()
+                    if (version) {
+						env.VERSION = version
+                        echo "Semantic release version: ${version}"
+                       
+                    } else {
+                        error "Version extraction failed."
+                    }
                 }
             }
         }
