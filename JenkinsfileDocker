@@ -25,7 +25,7 @@ pipeline {
                 script {
                     def currentVersion = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
                     echo "Current version from Git tags: ${currentVersion}"
-                    
+
                     env.VERSION = sh(script: "npx semver -i patch ${currentVersion}", returnStdout: true).trim()
                     echo "Version set to: ${env.VERSION}"
                 }
