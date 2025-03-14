@@ -8,6 +8,8 @@ pipeline {
         IMAGE_NAME = "saimanasg/api-server"
         DOCKER_CREDENTIALS_ID = "CloudJenkinsDockerHubPAT"
         TAG = "${env.VERSION}"
+        GIT_LOCAL_BRANCH = 'main'
+        GITHUB_TOKEN = credentials('github_token')  
     }
 
     stages {
