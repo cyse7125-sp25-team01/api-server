@@ -46,7 +46,7 @@ pipeline {
             steps {
                 script {
                     sh """
-                        docker buildx build --platform linux/amd64,linux/arm64,linux/386,linux/ppc64le \\
+                        docker buildx build --platform linux/amd64,linux/386 \\
                         -t ${IMAGE_NAME}:${env.VERSION} . --push
                     """
                 }

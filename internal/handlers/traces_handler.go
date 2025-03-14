@@ -1,19 +1,18 @@
 package handlers
 
 import (
-	"cloud.google.com/go/storage"
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/csye7125/team01/internal/store"
-	"github.com/go-chi/chi/v5"
-	"google.golang.org/api/option"
 	"io"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"cloud.google.com/go/storage"
+	"github.com/csye7125/team01/internal/store"
+	"github.com/go-chi/chi/v5"
 )
 
 type TraceHandler struct {
@@ -164,18 +163,11 @@ func extractFileNameFromURL(url string) string {
 }
 
 func (h *TraceHandler) uploadFileToGCS(ctx context.Context, file io.Reader, fileName string) (string, error) {
-	// Log the environment variable path
-	credFile := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-	fmt.Println("Using credentials file:", credFile)
+	// Log a message indicating that the credentials will be handled by GKE service account
+	fmt.Println("Using default service account for GCS access")
 
-	// Ensure the credentials file exists
-	if _, err := os.Stat(credFile); os.IsNotExist(err) {
-		fmt.Println("ERROR: Google Cloud credentials file does not exist.")
-		return "", fmt.Errorf("google cloud credentials file not found")
-	}
-
-	// Create GCS client
-	client, err := storage.NewClient(ctx, option.WithCredentialsFile(credFile))
+	// Create GCS client using default credentials (service account assigned to the pod)
+	client, err := storage.NewClient(ctx)
 	if err != nil {
 		fmt.Println("ERROR: Failed to create GCS client:", err)
 		return "", fmt.Errorf("failed to create storage client: %w", err)
@@ -210,11 +202,19 @@ func (h *TraceHandler) uploadFileToGCS(ctx context.Context, file io.Reader, file
 }
 
 func (h *TraceHandler) deleteFileFromGCS(ctx context.Context, fileName string) error {
-	client, err := storage.NewClient(ctx, option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
+	// Log a message indicating that the credentials will be handled by GKE service account
+	fmt.Println("Using default service account for GCS access")
+
+	// Create GCS client using default credentials (service account assigned to the pod)
+	client, err := storage.NewClient(ctx)
 	if err != nil {
+		fmt.Println("ERROR: Failed to create GCS client:", err)
 		return fmt.Errorf("failed to create storage client: %w", err)
 	}
 	defer client.Close()
+
+	// Log bucket and file name
+	fmt.Printf("Deleting file '%s' from bucket '%s'\n", fileName, h.BucketName)
 
 	bucket := client.Bucket(h.BucketName)
 	object := bucket.Object(fileName)
@@ -222,9 +222,11 @@ func (h *TraceHandler) deleteFileFromGCS(ctx context.Context, fileName string) e
 	// Delete the file from GCS
 	err = object.Delete(ctx)
 	if err != nil {
+		fmt.Println("ERROR: Failed to delete file from GCS:", err)
 		return fmt.Errorf("failed to delete file from GCS: %w", err)
 	}
 
-	fmt.Println("File deleted successfully from GCS:", fileName)
+	// Log success
+	fmt.Println("File successfully deleted from GCS:", fileName)
 	return nil
 }
