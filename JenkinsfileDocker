@@ -38,7 +38,8 @@ pipeline {
                         echo "Semantic release version: ${version}"
                        
                     } else {
-                        error "Version extraction failed."
+                        echo 'No new version detected, stopping pipeline.'
+                        error "No new version detected, stopping pipeline."
                     }
                 }
             }
