@@ -8,10 +8,6 @@
 *.out
 
 # Go modules
-go.work
-go.work.sum
-go.sum
-go.mod
 
 # IDE & Editor-specific files
 .vscode/
