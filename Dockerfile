@@ -1,14 +1,30 @@
-FROM golang:1.20 AS builder
+# Use the official Golang image as the base image
+FROM golang:latest AS builder
+
+# Set the Current Working Directory inside the container
 WORKDIR /app
+
+# Copy the Go Modules and Download Dependencies
 COPY go.mod go.sum ./
 RUN go mod tidy
 
+# Copy the Source Code into the Container
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o go-app main.go
+
+# Build the Go app (statically compiled for compatibility with Alpine)
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o api ./cmd/api
+
+# Start a new stage to create the final image
 FROM alpine:latest
 
+# Set the Current Working Directory inside the container
 WORKDIR /root/
-COPY --from=builder /app/go-app .
-RUN chmod +x go-app
+
+# Copy the binary from the builder stage
+COPY --from=builder /app/api .
+
+# Expose the port the app will run on
 EXPOSE 8080
-CMD ["./go-app"]
+
+# Command to run the application
+CMD ["./api"]
