@@ -86,29 +86,19 @@ func (h *CourseHandler) GetCourseHandler(w http.ResponseWriter, r *http.Request)
 func (h *CourseHandler) UpdateCourseHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	courseID, err := strconv.Atoi(chi.URLParam(r, "courseId"))
+	// 🔹 Extract Basic Auth credentials
+	username, password, ok := r.BasicAuth()
+	if !ok {
+		http.Error(w, `{"error": "Unauthorized. Missing Basic Auth"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// 🔹 Get user ID from credentials
+	user, err := h.Store.Users.GetUserByCredentials(r.Context(), username, password)
 	if err != nil {
-		http.Error(w, `{"error": "Invalid course ID"}`, http.StatusBadRequest)
+		http.Error(w, `{"error": "Invalid credentials"}`, http.StatusUnauthorized)
 		return
 	}
-
-	var updateData store.Course
-	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
-		http.Error(w, `{"error": "Invalid request payload"}`, http.StatusBadRequest)
-		return
-	}
-
-	if err := h.Store.Courses.UpdateCourse(r.Context(), uint(courseID), &updateData); err != nil {
-		http.Error(w, `{"error": "Could not update course"}`, http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(updateData)
-}
-
-func (h *CourseHandler) PatchCourseHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
 
 	// 🔹 Extract course ID from URL
 	courseID, err := strconv.Atoi(chi.URLParam(r, "courseId"))
@@ -117,27 +107,88 @@ func (h *CourseHandler) PatchCourseHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// 🔹 Check if the course exists
-	_, err = h.Store.Courses.GetCourseByID(r.Context(), uint(courseID))
+	// 🔹 Get the course details
+	course, err := h.Store.Courses.GetCourseByID(r.Context(), uint(courseID))
 	if err != nil {
 		http.Error(w, `{"error": "Course not found"}`, http.StatusNotFound)
 		return
 	}
 
-	// 🔹 Decode JSON request payload
+	// 🔹 Ensure the authenticated user is the course owner
+	if user.ID != course.OwnerUserID {
+		http.Error(w, `{"error": "Unauthorized. Only the owner can update this course"}`, http.StatusForbidden)
+		return
+	}
+
+	// 🔹 Decode update data
+	var updateData store.Course
+	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
+		http.Error(w, `{"error": "Invalid request payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	// 🔹 Perform update
+	if err := h.Store.Courses.UpdateCourse(r.Context(), uint(courseID), &updateData); err != nil {
+		http.Error(w, `{"error": "Could not update course"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// 🔹 Respond with success
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(updateData)
+}
+
+func (h *CourseHandler) PatchCourseHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// 🔹 Extract Basic Auth credentials
+	username, password, ok := r.BasicAuth()
+	if !ok {
+		http.Error(w, `{"error": "Unauthorized. Missing Basic Auth"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// 🔹 Get user ID from credentials
+	user, err := h.Store.Users.GetUserByCredentials(r.Context(), username, password)
+	if err != nil {
+		http.Error(w, `{"error": "Invalid credentials"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// 🔹 Extract course ID from URL
+	courseID, err := strconv.Atoi(chi.URLParam(r, "courseId"))
+	if err != nil {
+		http.Error(w, `{"error": "Invalid course ID"}`, http.StatusBadRequest)
+		return
+	}
+
+	// 🔹 Get the course details
+	course, err := h.Store.Courses.GetCourseByID(r.Context(), uint(courseID))
+	if err != nil {
+		http.Error(w, `{"error": "Course not found"}`, http.StatusNotFound)
+		return
+	}
+
+	// 🔹 Ensure the authenticated user is the course owner
+	if user.ID != course.OwnerUserID {
+		http.Error(w, `{"error": "Unauthorized. Only the owner can patch this course"}`, http.StatusForbidden)
+		return
+	}
+
+	// 🔹 Decode update data
 	var updateData map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
 		http.Error(w, `{"error": "Invalid request payload"}`, http.StatusBadRequest)
 		return
 	}
 
-	// 🔹 Perform the update
+	// 🔹 Perform update
 	if err := h.Store.Courses.PatchCourse(r.Context(), uint(courseID), updateData); err != nil {
 		http.Error(w, `{"error": "Could not patch course"}`, http.StatusInternalServerError)
 		return
 	}
 
-	// 🔹 Respond with updated data
+	// 🔹 Respond with success
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(updateData)
 }
@@ -145,25 +196,46 @@ func (h *CourseHandler) PatchCourseHandler(w http.ResponseWriter, r *http.Reques
 func (h *CourseHandler) DeleteCourseHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// 🔹 Extract Basic Auth credentials
+	username, password, ok := r.BasicAuth()
+	if !ok {
+		http.Error(w, `{"error": "Unauthorized. Missing Basic Auth"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// 🔹 Get user ID from credentials
+	user, err := h.Store.Users.GetUserByCredentials(r.Context(), username, password)
+	if err != nil {
+		http.Error(w, `{"error": "Invalid credentials"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// 🔹 Extract course ID from URL
 	courseID, err := strconv.Atoi(chi.URLParam(r, "courseId"))
 	if err != nil {
 		http.Error(w, `{"error": "Invalid course ID"}`, http.StatusBadRequest)
 		return
 	}
 
-	// 🔹 Step 1: Check if course exists
-	existingCourse, err := h.Store.Courses.GetCourseByID(r.Context(), uint(courseID))
+	// 🔹 Get the course details
+	course, err := h.Store.Courses.GetCourseByID(r.Context(), uint(courseID))
 	if err != nil {
 		http.Error(w, `{"error": "Course not found"}`, http.StatusNotFound)
 		return
 	}
 
-	// 🔹 Step 2: Delete the course
-	if err := h.Store.Courses.DeleteCourse(r.Context(), existingCourse.ID); err != nil {
+	// 🔹 Ensure the authenticated user is the course owner
+	if user.ID != course.OwnerUserID {
+		http.Error(w, `{"error": "Unauthorized. Only the owner can delete this course"}`, http.StatusForbidden)
+		return
+	}
+
+	// 🔹 Delete the course
+	if err := h.Store.Courses.DeleteCourse(r.Context(), uint(courseID)); err != nil {
 		http.Error(w, `{"error": "Could not delete course"}`, http.StatusInternalServerError)
 		return
 	}
 
-	// 🔹 Step 3: Respond with success
+	// 🔹 Respond with success
 	w.WriteHeader(http.StatusNoContent)
 }
