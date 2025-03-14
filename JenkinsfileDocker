@@ -20,6 +20,15 @@ pipeline {
                 }
             }
         }
+        stage('Checkout') {
+            steps {
+                script {
+                    echo "Checking out the repository..."
+                    // Checkout the code from the GitHub repository
+                    checkout scm
+                }
+            }
+        }
         stage('Set up Buildx') {
             steps {
                 script {
