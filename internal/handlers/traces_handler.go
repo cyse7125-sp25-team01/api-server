@@ -8,6 +8,7 @@ import (
 	"github.com/csye7125/team01/internal/store"
 	"github.com/go-chi/chi/v5"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
@@ -161,7 +162,7 @@ func (h *TraceHandler) UploadTraceHandler(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(uploadedTraces)
 }
 
-func (h *TraceHandler) uploadFileToGCS(ctx context.Context, file io.Reader, fileName string) (string, error) {
+func (h *TraceHandler) uploadFileToGCS(ctx context.Context, file multipart.File, fileName string) (string, error) {
 	// Log the environment variable path
 
 	fmt.Println("Using service account")
@@ -180,7 +181,17 @@ func (h *TraceHandler) uploadFileToGCS(ctx context.Context, file io.Reader, file
 	bucket := client.Bucket(h.BucketName)
 	object := bucket.Object(fileName)
 	writer := object.NewWriter(ctx)
-	writer.ContentType = "application/octet-stream"
+	buf := make([]byte, 512)
+	_, err = file.Read(buf)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file header: %w", err)
+	}
+	contentType := http.DetectContentType(buf)
+	_, err = file.Seek(0, io.SeekStart) // reset reader
+	if err != nil {
+		return "", fmt.Errorf("failed to reset file pointer: %w", err)
+	}
+	writer.ContentType = contentType
 
 	// Copy file to GCS
 	if _, err := io.Copy(writer, file); err != nil {
