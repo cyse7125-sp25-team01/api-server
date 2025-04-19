@@ -55,6 +55,11 @@ func (h *TraceHandler) GetAllTracesHandler(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(traces)
 }
 
+func extractFileNameFromURL(url string) string {
+	parts := strings.Split(url, "/")
+	return parts[len(parts)-1] // Extract last part of URL as filename
+}
+
 func (h *TraceHandler) DeleteTraceHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -91,7 +96,6 @@ func (h *TraceHandler) DeleteTraceHandler(w http.ResponseWriter, r *http.Request
 func (h *TraceHandler) UploadTraceHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Parse course ID from URL
 	courseIDStr := chi.URLParam(r, "course_id")
 	courseID, err := strconv.ParseUint(courseIDStr, 10, 32)
 	if err != nil {
@@ -99,66 +103,62 @@ func (h *TraceHandler) UploadTraceHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// ✅ Extract Basic Auth for `user_id`
 	username, password, ok := r.BasicAuth()
 	if !ok {
 		http.Error(w, `{"error": "Unauthorized: Missing Basic Auth"}`, http.StatusUnauthorized)
 		return
 	}
 
-	// ✅ Get user by credentials
 	user, err := h.Store.Users.GetUserByCredentials(r.Context(), username, password)
 	if err != nil {
 		http.Error(w, `{"error": "Invalid credentials"}`, http.StatusUnauthorized)
 		return
 	}
 
-	// Parse file from form-data
-	err = r.ParseMultipartForm(10 << 20)
+	err = r.ParseMultipartForm(50 << 20) // support larger payload
 	if err != nil {
 		http.Error(w, `{"error": "Failed to parse multipart form"}`, http.StatusBadRequest)
 		return
 	}
 
-	file, handler, err := r.FormFile("file")
-	if err != nil {
-		http.Error(w, `{"error": "Missing file in request"}`, http.StatusBadRequest)
-		return
+	formFiles := r.MultipartForm.File["files"] // same key as Postman
+
+	var uploadedTraces []*store.Trace
+
+	for _, fileHeader := range formFiles {
+		file, err := fileHeader.Open()
+		if err != nil {
+			http.Error(w, `{"error": "Failed to open file"}`, http.StatusInternalServerError)
+			return
+		}
+		defer file.Close()
+
+		uniqueFilename := fmt.Sprintf("%d-%s", time.Now().UnixNano(), fileHeader.Filename)
+
+		gcsURL, err := h.uploadFileToGCS(r.Context(), file, uniqueFilename)
+		if err != nil {
+			http.Error(w, `{"error": "Failed to upload file to GCS"}`, http.StatusInternalServerError)
+			return
+		}
+
+		trace := &store.Trace{
+			CourseID:    uint(courseID),
+			UserID:      user.ID,
+			FileName:    fileHeader.Filename,
+			BucketPath:  gcsURL,
+			DateCreated: time.Now(),
+		}
+
+		if err := h.Store.Traces.CreateTrace(r.Context(), trace); err != nil {
+			http.Error(w, `{"error": "Could not save trace metadata"}`, http.StatusInternalServerError)
+			return
+		}
+
+		uploadedTraces = append(uploadedTraces, trace)
 	}
-	defer file.Close()
 
-	// Generate a unique filename using timestamp
-	uniqueFilename := fmt.Sprintf("%d-%s", time.Now().Unix(), handler.Filename)
-
-	// Upload file to GCS
-	gcsURL, err := h.uploadFileToGCS(r.Context(), file, uniqueFilename)
-	if err != nil {
-		http.Error(w, `{"error": "Failed to upload file to GCS"}`, http.StatusInternalServerError)
-		return
-	}
-
-	// ✅ Store metadata in database with `user_id`
-	trace := &store.Trace{
-		CourseID:    uint(courseID),
-		UserID:      user.ID, // ✅ Add user_id from authentication
-		FileName:    handler.Filename,
-		BucketPath:  gcsURL,
-		DateCreated: time.Now(),
-	}
-
-	if err := h.Store.Traces.CreateTrace(r.Context(), trace); err != nil {
-		http.Error(w, `{"error": "Could not save trace metadata"}`, http.StatusInternalServerError)
-		return
-	}
-
-	// ✅ Respond with uploaded file metadata
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(trace)
-}
-
-func extractFileNameFromURL(url string) string {
-	parts := strings.Split(url, "/")
-	return parts[len(parts)-1] // Extract last part of URL as filename
+	json.NewEncoder(w).Encode(uploadedTraces)
 }
 
 func (h *TraceHandler) uploadFileToGCS(ctx context.Context, file io.Reader, fileName string) (string, error) {
