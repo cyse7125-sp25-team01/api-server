@@ -133,7 +133,7 @@ func (h *TraceHandler) UploadTraceHandler(w http.ResponseWriter, r *http.Request
 		}
 		defer file.Close()
 
-		uniqueFilename := fmt.Sprintf("%d-%s", time.Now().UnixNano(), fileHeader.Filename)
+		uniqueFilename := fileHeader.Filename
 
 		gcsURL, err := h.uploadFileToGCS(r.Context(), file, uniqueFilename)
 		if err != nil {
